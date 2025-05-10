@@ -6,6 +6,11 @@ import org.springframework.data.jpa.repository.Query;
 import java.util.List;
 
 public interface ItemRepository extends JpaRepository<Item, Long> {
-    @Query("SELECT id FROM Item")
+    /**
+     * Custom query to find all item IDs.
+     *
+     * @return a list of all item IDs in the database
+     */
+    @Query("SELECT i.id FROM Item i")
     List<Long> findAllIds();
 }
