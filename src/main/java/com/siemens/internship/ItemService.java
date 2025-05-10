@@ -126,67 +126,47 @@ public class ItemService {
      */
     public List<Item> processItemsAsync() {
         try {
-            // Get all item IDs
             List<Long> itemIds = itemRepository.findAllIds();
-
-            // Create a list to hold all futures
             List<CompletableFuture<Item>> futures = new ArrayList<>();
 
-            // Create a future for each item
             for (Long id : itemIds) {
                 CompletableFuture<Item> future = CompletableFuture.supplyAsync(() -> {
                     try {
-                        // Simulating some processing time
-                        Thread.sleep(100);
+                        Thread.sleep(100);  // Simulăm un timp de procesare
+                        Optional<Item> itemOpt = itemRepository.findById(id);
 
-                        // Find the item
-                        Optional<Item> optionalItem = itemRepository.findById(id);
-                        if (optionalItem.isEmpty()) {
-                            logger.warn("Item with id {} not found during async processing", id);
+                        if (itemOpt.isEmpty()) {
+                            logger.warn("Item not found with id: {}", id);
                             return null;
                         }
 
-                        Item item = optionalItem.get();
+                        Item item = itemOpt.get();
                         item.setStatus("PROCESSED");
-
-                        // Save the updated item
                         return itemRepository.save(item);
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
-                        logger.error("Interrupted during item processing: {}", e.getMessage());
+                        logger.error("Processing interrupted for item id: {}", id);
                         return null;
                     } catch (Exception e) {
-                        logger.error("Error processing item with id {}: {}", id, e.getMessage());
+                        logger.error("Error processing item id: {}: {}", id, e.getMessage());
                         return null;
                     }
                 }, executor);
-
                 futures.add(future);
             }
 
-            // Wait for all futures to complete and collect results
-            CompletableFuture<Void> allFutures = CompletableFuture.allOf(
-                    futures.toArray(new CompletableFuture[0])
-            );
-
-            // Get the results after all futures complete
-            return allFutures.thenApply(v ->
-                    futures.stream()
+            // Așteaptă finalizarea tuturor futures
+            CompletableFuture<Void> allOf = CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
+            return allOf.thenApply(v -> futures.stream()
                             .map(CompletableFuture::join)
                             .filter(item -> item != null)
-                            .collect(Collectors.toList())
-            ).get(30, TimeUnit.SECONDS); // Set a reasonable timeout
+                            .collect(Collectors.toList()))
+                    .get(30, TimeUnit.SECONDS); // Timeout de 30 secunde
 
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            logger.error("Process was interrupted: {}", e.getMessage());
-            throw new RuntimeException("Process was interrupted", e);
-        } catch (ExecutionException e) {
-            logger.error("Execution error during async processing: {}", e.getMessage());
-            throw new RuntimeException("Error during async processing", e.getCause());
-        } catch (TimeoutException e) {
-            logger.error("Timeout occurred during async processing: {}", e.getMessage());
-            throw new RuntimeException("Timeout during async processing", e);
+        } catch (InterruptedException | ExecutionException | TimeoutException e) {
+            logger.error("Error during async processing: {}", e.getMessage());
+            throw new RuntimeException("Error during async processing", e);
         }
     }
+
 }
